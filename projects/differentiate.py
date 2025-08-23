@@ -2,10 +2,17 @@ import numpy as np
 
 
 def differentiate(u: np.ndarray, dt: float) -> np.ndarray:
-    raise NotImplementedError
+    du = np.empty_like(u)
+    for i in range(len(u)-1):
+        du[i] = u[i+1] - u[i]
+    du[-1] = 0.0
+    return du/dt
 
 def differentiate_vector(u: np.ndarray, dt: float) -> np.ndarray:
-    raise NotImplementedError
+    du = np.empty_like(u)
+    du[:-1] = u[1:] - u[:-1]
+    du[-1] = 0.0
+    return du/dt
 
 def test_differentiate():
     t = np.linspace(0, 1, 10)
