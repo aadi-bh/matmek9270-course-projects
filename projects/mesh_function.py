@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 
 def mesh_function(f: Callable[[float], float], t: np.ndarray) -> np.ndarray:
-    raise NotImplementedError
+    return f(t)
 
 
 def func(t: float) -> float:
