@@ -76,6 +76,10 @@ class VibSolver:
         """
         u = self()
         ue = self.u_exact()
+#        plt.plot(u, label="u")
+#        plt.plot(ue, label="ue")
+#        plt.legend()
+#        plt.show()
         return np.sqrt(self.dt * np.sum((ue - u) ** 2))
 
     def convergence_rates(
@@ -203,7 +207,20 @@ class VibFD4(VibFD2):
     order: int = 4
 
     def __call__(self) -> np.ndarray:
-        u = np.zeros(self.Nt + 1)
+        g = 30 - 12 * self.w**2 * self.dt**2
+        A = sparse.diags([-1, 16, -g, 16, -1], [-2, -1, 0, 1, 2], (self.Nt + 1, self.Nt + 1), 'lil')
+        b = np.zeros(self.Nt + 1)
+        # Dirichlet boundary conditions
+        A[0, :5] = 1, 0, 0, 0, 0
+        A[-1, -5:] = 0, 0, 0, 0, 1
+        # RHS BC
+        b[0], b[-1] = self.I, self.I
+        # Skewed stencil for u_1 and u_{N-1}
+        gprime = 15 - 12 * self.w**2 * self.dt**2
+        A[1, :6] = 10, -gprime, -4, 14, -6, 1
+        A[-2, -6:] = 1, -6, 14, -4, -gprime, 10
+        # Solve
+        u = sparse.linalg.spsolve(A.tocsr(), b)
         return u
 
 
