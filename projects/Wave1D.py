@@ -56,12 +56,19 @@ class Wave1D:
         The returned matrix is not divided by dx**2
         """
         D = sparse.diags([1, -2, 1], [-1, 0, 1], (self.N + 1, self.N + 1), "lil")
-        if bc == 1:  # Neumann condition is baked into stencil
-            raise NotImplementedError
-
+        if bc == 0: # Dirichlet
+            D[ 0,  :2] = 0, 0
+            D[-1, -2:] = 0, 0
+        elif bc == 1: # Neumann
+            # Neumann condition is baked into stencil 
+            D[ 0,   :2] = -2,  2
+            D[-1, -2: ] =  2, -2
+        elif bc == 2: # Open boundary
+            # Implemented only in Wave1D.apply_bcs
+            pass
         elif bc == 3:  # periodic (Note u[0] = u[-1])
-            raise NotImplementedError
-
+            D[0, -2] = 1
+            # u_N+1^{n+1} = u_0^{n+1} in Wave1D.apply_bcs
         return D
 
     def apply_bcs(self, bc: int, u: np.ndarray | None = None):
@@ -89,10 +96,11 @@ class Wave1D:
             pass
 
         elif bc == 2:  # Open boundary
-            raise NotImplementedError
+            u[ 0] = 2 * (1 - self.c) * self.un[ 0] - (1 - self.c) / (1 + self.c) * self.unm1[ 0] + 2 * self.c**2 / (1 + self.c) * self.un[ 1]
+            u[-1] = 2 * (1 - self.c) * self.un[-1] - (1 - self.c) / (1 + self.c) * self.unm1[-1] + 2 * self.c**2 / (1 + self.c) * self.un[-2]
 
         elif bc == 3:
-            raise NotImplementedError
+            u[-1] = u[0]
 
         else:
             raise RuntimeError(f"Wrong bc = {bc}")
