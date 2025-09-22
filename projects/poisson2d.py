@@ -24,9 +24,8 @@ class Poisson2D:
         """
         self.x = self.px.create_mesh(self.px.N)
         self.y = self.py.create_mesh(self.py.N)
-        self.sxx, self.syy = np.meshgrid(self.x, self.y, sparse=False)
+        self.sxx, self.syy = np.meshgrid(self.x, self.y, sparse=False, indexing='ij')
         return self.sxx, self.syy
-        raise NotImplementedError
 
     def laplace(self):
         """Return a vectorized Laplace operator"""
@@ -35,25 +34,28 @@ class Poisson2D:
         D2X = sparse.kron(Dx, sparse.eye(self.px.N+1))
         D2Y = sparse.kron(sparse.eye(self.py.N+1), Dy)
         return D2X + D2Y
-        raise NotImplementedError
 
     def assemble(self, bc=None, f=implemented_function('f', lambda x, y: 4)(x,y)):
         """Return assembled coefficient matrix A and right hand side vector b"""
-        self.create_mesh()
+        xij, yij = self.create_mesh()
         A = self.laplace()
-        F = np.empty((self.px.N+1, self.py.N+1))
-        F[:,:] = sp.lambdify((x, y), f)(self.sxx, self.syy)
+        F = sp.lambdify((x, y), f)(xij, yij)
 
         # Dirichlet boundary
         B = np.ones((self.px.N+1, self.py.N+1), dtype=bool)
         B[1:-1, 1:-1] = 0
+        # Boundary indices after unraveling
         bnds = np.where(B.ravel() == 1)[0]
+        # List-in-list format
         A = A.tolil()
         for i in bnds:
             A[i] = 0.0
             A[i, i] = 1.0
+        # Back to CSR for solving purposes
         A = A.tocsr()
+        # RHS is unravelled F(x,y)
         b = F.ravel()
+        # Enforcing boundary values to be zero, jic F was not
         b[bnds] = 0.0
         return A, b
         raise NotImplementedError
@@ -68,9 +70,7 @@ class Poisson2D:
         ue : Sympy function
             The analytical solution
         """
-        print(self.sxx, self.syy)
         uj = sp.lambdify((x, y), ue)(self.sxx, self.syy)
-        print(uj, '\n', u)
         return np.sqrt(self.px.dx * self.py.dx * np.sum((uj - u)**2))
         raise NotImplementedError
 
@@ -91,13 +91,12 @@ class Poisson2D:
         return sparse.linalg.spsolve(A, b.ravel()).reshape((self.px.N+1, self.py.N+1))
 
 def test_poisson2d():
-    Lx = 2
-    Ly = 2
-    sol = Poisson2D(Lx, Ly, 5, 5)
-    ue = x*(x-Lx) *  y*(y-Ly)
-    ue = x*(x-Lx) *  y*(y-Ly)
-    B = np.ones((sol.px.N+1, sol.py.N+1)) * np.nan
+    Lx = 1
+    Ly = 1
+    sol = Poisson2D(Lx, Ly, 30, 30)
+    ue = x * (x - Lx) *  y * (y - Ly) * sp.exp(sp.cos(4 * sp.pi * x) * sp.sin(2 * sp.pi * y))
     u = sol(f=ue.diff(x,2) + ue.diff(y,2))
+    assert sol.l2_error(u, ue) < 1e-3
     print(f'L2-error {sol.l2_error(u, ue)}')
 
 
