@@ -35,13 +35,14 @@ class Poisson2D:
         D2Y = sparse.kron(sparse.eye(self.py.N+1), Dy)
         return D2X + D2Y
 
-    def assemble(self, bc=None, f=implemented_function('f', lambda x, y: 4)(x,y)):
+    def assemble(self, dbc=None, f=implemented_function('f', lambda x, y: 4)(x,y)):
         """Return assembled coefficient matrix A and right hand side vector b"""
         xij, yij = self.create_mesh()
         A = self.laplace()
-        F = sp.lambdify((x, y), f)(xij, yij)
+        F = np.empty((self.px.N + 1, self.py.N + 1))
+        F[:] = sp.lambdify((x, y), f)(xij, yij)
 
-        # Dirichlet boundary
+        # Dirichlet boundary: values provided
         B = np.ones((self.px.N+1, self.py.N+1), dtype=bool)
         B[1:-1, 1:-1] = 0
         # Boundary indices after unraveling
@@ -51,14 +52,20 @@ class Poisson2D:
         for i in bnds:
             A[i] = 0.0
             A[i, i] = 1.0
+        print(B)
         # Back to CSR for solving purposes
         A = A.tocsr()
         # RHS is unravelled F(x,y)
         b = F.ravel()
-        # Enforcing boundary values to be zero, jic F was not
-        b[bnds] = 0.0
+
+        # Set boundary values to dbc
+        # dbc may not be defined outside the boundary
+        B = np.where(B == 1, sp.lambdify((x,y), dbc)(xij, yij), 0)
+        # Just assume zero if BC are not provided?
+        if dbc == None:
+            dbc = sp.core.numbers.Zero
+        b[bnds] = B.ravel()[bnds]
         return A, b
-        raise NotImplementedError
 
     def l2_error(self, u, ue):
         """Return l2-error
@@ -72,9 +79,8 @@ class Poisson2D:
         """
         uj = sp.lambdify((x, y), ue)(self.sxx, self.syy)
         return np.sqrt(self.px.dx * self.py.dx * np.sum((uj - u)**2))
-        raise NotImplementedError
 
-    def __call__(self, f=implemented_function('f', lambda x, y: 2)(x, y)):
+    def __call__(self, f=implemented_function('f', lambda x, y: 2)(x, y), dbc=implemented_function('g', lambda x,y: 0)(x,y)):
         """Solve Poisson's equation with a given right hand side function
 
         Parameters
@@ -87,7 +93,7 @@ class Poisson2D:
         The solution as a Numpy array
 
         """
-        A, b = self.assemble(f=f)
+        A, b = self.assemble(f=f, dbc=dbc)
         return sparse.linalg.spsolve(A, b.ravel()).reshape((self.px.N+1, self.py.N+1))
 
 def test_poisson2d():
@@ -96,10 +102,22 @@ def test_poisson2d():
     sol = Poisson2D(Lx, Ly, 30, 30)
     ue = x * (x - Lx) *  y * (y - Ly) * sp.exp(sp.cos(4 * sp.pi * x) * sp.sin(2 * sp.pi * y))
     u = sol(f=ue.diff(x,2) + ue.diff(y,2))
-    assert sol.l2_error(u, ue) < 1e-3
     print(f'L2-error {sol.l2_error(u, ue)}')
+    assert sol.l2_error(u, ue) < 1e-3
 
-
+    Lx = 2
+    Ly = 2
+    sol = Poisson2D(Lx, Ly, 10, 10)
+    ue = x**2 - y**2
+    u = sol(dbc=ue, f = ue.diff(x, 2) + ue.diff(y, 2))
+    print(f'L2-error {sol.l2_error(u, ue)}')
+    assert sol.l2_error(u, ue) < 1e-3
+    '''
+    fig, axs = plt.subplots(1,2)
+    axs[0].contourf(sol.sxx, sol.syy, sp.lambdify((x,y), ue)(sol.sxx, sol.syy))
+    axs[1].contourf(sol.sxx, sol.syy, u)
+    plt.show()
+    '''
 
 if __name__ == "__main__":
     test_poisson2d()
